@@ -63,7 +63,7 @@ services:
     branch: main
     buildCommand: pip install -r requirements.txt
     startCommand: python3 bot.py
-    autoDeploy: true
+    autoDeploy: false
     envVars:
       - key: BOT_TOKEN
         sync: false
