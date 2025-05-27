@@ -1,12 +1,12 @@
 services:
 - type: web
-  name: telegram-shmulc-bot
+  name: telegram-bot
   runtime: python
   plan: free
   branch: main
   buildCommand: pip install -r requirements.txt
   startCommand: python3 bot.py
-  autoDeploy: false
+  autoDeploy: true
   envVars:
   - key: BOT_TOKEN
     sync: false
