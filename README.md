@@ -33,6 +33,22 @@ The `async_bot.py` solves this by:
 - Providing `/healthcheck` endpoint for Render
 - Auto-switching to polling for local development
 
+### Alternative: Background Workers (Paid)
+
+If you prefer using polling bots and don't mind paying, **Background Workers** are actually a better solution:
+
+- **No health checks**: Background workers don't have HTTP health check requirements
+- **Long-running processes**: Designed for bots that run continuously
+- **Use any bot**: Both `async_bot.py` and `sync_bot.py` work without modification
+- **Simpler setup**: No need for webhook configuration
+
+**To use Background Workers:**
+1. Deploy as a "Background Worker" instead of "Web Service"
+2. Use either bot file with polling mode
+3. No need for `/healthcheck` endpoint
+
+**Trade-off**: Background workers cost money, while web services with webhooks can use the free tier.
+
 ## Local Development
 
 ```bash
