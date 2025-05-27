@@ -1,115 +1,91 @@
 # Telegram Bot Deployment on Render
 
-This repository contains a simple Telegram echo bot that can be deployed to [Render](https://render.com/). The bot will echo back any message sent to it.
+Deploy Telegram bots on [Render](https://render.com/) with two ready-to-use implementations.
+Partially based on the blog post [Getting your python telegram bot working on Render](https://dashdashhard.com/posts/python-telegram-bots/).
 
-## Project Structure
+## Bot Options
 
-- `bot.py` - The main bot code
-- `render.yaml` - Render deployment configuration
-- `requirements.txt` - Python dependencies
+- **`async_bot.py`** - Production-ready bot with webhooks (recommended for Render)
+- **`sync_bot.py`** - Simple polling bot (for learning and local development)
 
-## Prerequisites
+## Quick Deploy
 
-1. A Telegram bot token (created via [@BotFather](https://t.me/BotFather))
-2. A [Render](https://render.com/) account
-3. Git repository hosting service account (GitHub, GitLab, etc.)
+1. **Get bot token**: Message [@BotFather](https://t.me/BotFather) → `/newbot`
+2. **Fork this repo**: Click "Fork" button above
+3. **Deploy on Render**:
+   - New → Blueprint → Connect your fork
+   - Add environment variable: `BOT_TOKEN=your_token_here`
+   - Deploy
 
-## Deployment Steps
+Your bot will be live at `https://your-app.onrender.com/healthcheck`
 
-### 1. Create Your Bot on Telegram
+## Why Webhooks on Render?
 
-1. Open Telegram and search for [@BotFather](https://t.me/BotFather)
-2. Send `/newbot` command to BotFather
-3. Follow the prompts to name your bot and create a username
-4. BotFather will provide you with a token. Save this token for later use
+Render's health checks cause polling bots to fail with:
 
-### 2. Prepare Your Repository
-
-1. Fork this repository to your GitHub account:
-   - Navigate to the repository URL in your browser
-   - Click the "Fork" button in the top-right corner
-   - Select your account when prompted
-
-You can customize your bot later as described in the "Customizing Your Bot" section below.
-
-### 3. Deploy to Render
-
-1. Sign in to [Render](https://render.com/)
-2. From the dashboard, click "New" and select "Blueprint"
-3. Connect your Git repository containing this code
-4. Render will automatically detect the `render.yaml` file
-5. Click "Apply Blueprint"
-6. In the environment variables section, add your bot token:
-   - Key: `BOT_TOKEN`
-   - Value: `<your-telegram-bot-token>`
-7. Click "Create Blueprint"
-
-### 4. Verify Deployment
-
-1. Render will start deploying your service
-2. Once deployment is complete, send a message to your bot on Telegram
-3. Your bot should echo back any messages you send
-
-## Configuration Details
-
-The `render.yaml` file configures your bot as a web service:
-
-```yaml
-services:
-  - type: web
-    name: telegram-bot
-    runtime: python
-    plan: free
-    branch: main
-    buildCommand: pip install -r requirements.txt
-    startCommand: python3 bot.py
-    autoDeploy: false
-    envVars:
-      - key: BOT_TOKEN
-        sync: false
+```
+telegram.error.Conflict: terminated by other getUpdates request
 ```
 
-You can modify the following fields based on your needs:
+The `async_bot.py` solves this by:
 
-- `name`: Change to your preferred service name
-- `plan`: Upgrade from `free` if you need more resources
-- `branch`: The Git branch to deploy
-- `autoDeploy`: Set to `true` to enable automatic deployments on push
+- Using webhooks in production (no polling conflicts)
+- Providing `/healthcheck` endpoint for Render
+- Auto-switching to polling for local development
 
-## Troubleshooting
+## Local Development
 
-If your bot doesn't respond:
+```bash
+pip install -r requirements.txt
+BOT_TOKEN=your_token_here python async_bot.py  # Recommended
+BOT_TOKEN=your_token_here python sync_bot.py   # Learning only
+```
 
-1. Check Render logs for any errors
-2. Verify that the `BOT_TOKEN` environment variable is set correctly
-3. Make sure your bot is running by checking the Render dashboard
+## Bot Comparison
 
-## Customizing Your Bot
+| Feature               | async_bot.py    | sync_bot.py       |
+| --------------------- | --------------- | ----------------- |
+| **Render Free Tier**  | ✅ Works        | ❌ Conflicts      |
+| **Local Development** | ✅ Auto-polling | ✅ Simple polling |
+| **Production Ready**  | ✅ Webhooks     | ❌ Polling only   |
+| **Best For**          | Deployment      | Learning          |
 
-After forking the repository, you can customize your bot before deploying:
+## Configuration Files
 
-1. Clone your forked repository (optional):
+### `render.yaml` - Deployment Configuration
 
-   ```
-   git clone https://github.com/your-username/render_telegram_bot.git
-   cd render_telegram_bot
-   ```
+This file tells Render how to deploy your bot. It specifies:
 
-2. Modify the files as needed:
+- **Service type**: Web service with public URL
+- **Runtime**: Python environment
+- **Build process**: How to install dependencies
+- **Start command**: Which bot file to run
+- **Environment variables**: Bot token configuration
 
-   - `bot.py`: Add more commands or functionality beyond the basic echo feature
-   - `render.yaml`: Change service name, plan, or other deployment settings
-   - `requirements.txt`: Add additional Python packages if required by your bot
+**To customize:**
 
-3. Push your changes to GitHub:
-   ```
-   git add .
-   git commit -m "Customize bot functionality"
-   git push
-   ```
+- Change the service `name` to your preferred identifier
+- Switch the `startCommand` to run `sync_bot.py` instead of `async_bot.py`
+- Upgrade the `plan` from `free` to paid tiers for more resources
+- Add additional environment variables if your bot needs them
 
-## Additional Resources
+### `requirements.txt` - Python Dependencies
 
-- [Render Documentation](https://render.com/docs)
-- [Python Telegram Bot Documentation](https://python-telegram-bot.readthedocs.io/)
-- [Telegram Bot API Documentation](https://core.telegram.org/bots/api)
+Lists the Python packages your bot needs:
+
+- **python-telegram-bot**: Main library for Telegram bot functionality
+- **uvicorn**: ASGI server for handling webhooks
+- **starlette**: Web framework for HTTP endpoints and health checks
+
+**To customize:**
+
+- Add new packages for additional bot features (databases, APIs, etc.)
+- Update package versions (check compatibility with python-telegram-bot)
+- Remove web-related packages (`uvicorn`, `starlette`) if only using sync bot locally
+- Pin specific versions for reproducible deployments
+
+## Resources
+
+- [Original Blog Post](https://dashdashhard.com/posts/python-telegram-bots/) - Explains the Render deployment challenge
+- [Render Docs](https://render.com/docs)
+- [python-telegram-bot Docs](https://python-telegram-bot.readthedocs.io/)
