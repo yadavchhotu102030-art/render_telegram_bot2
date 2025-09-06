@@ -108,7 +108,7 @@ async def main():
     # ✅ THIS IS THE CORRECT FILTER COMBINATION for PTB v22+
     app.add_handler(
         MessageHandler(
-            filters.TEXT | filters.Sticker.ALL | filters.PHOTO.ALL | filters.Document.ALL,
+            filters.TEXT | filters.Sticker.ALL | filters.PHOTO | filters.Document.ALL,
             forward_message
         )
     )
