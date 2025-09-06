@@ -104,7 +104,12 @@ async def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("chat", chat))
     app.add_handler(CommandHandler("leave", leave))
-    app.add_handler(MessageHandler(filters.TEXT | filters.Sticker | filters.PHOTO | filters.Document, forward_message))
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT | filters.STICKER | filters.PHOTO | filters.DOCUMENT,
+            forward_message
+        )
+    )
 
     if USE_WEBHOOK:
         await app.bot.set_webhook(url=f"{URL}/telegram")
@@ -117,7 +122,11 @@ async def main():
         async def health(_: Request) -> PlainTextResponse:
             return PlainTextResponse("Bot is running!")
 
+        async def root(_: Request) -> PlainTextResponse:
+            return PlainTextResponse("Anonymous Chat Bot is alive!")
+
         star_app = Starlette(routes=[
+            Route("/", root, methods=["GET"]),
             Route("/telegram", telegram, methods=["POST"]),
             Route("/healthcheck", health, methods=["GET"]),
         ])
