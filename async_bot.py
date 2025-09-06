@@ -17,14 +17,13 @@ from telegram.ext import (
     filters,
 )
 
-# Enable logging
+# Logging setup
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-# Configuration
+# Config
 URL = os.environ.get("RENDER_EXTERNAL_URL")
 PORT = int(os.environ.get("PORT", 8000))
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -33,76 +32,115 @@ if not TOKEN:
     raise ValueError("BOT_TOKEN environment variable is required")
 
 USE_WEBHOOK = URL is not None
-logger.info("Running in %s mode", "webhook" if USE_WEBHOOK else "polling")
+
+# Global in-memory chat state
+waiting_users = []
+active_chats = {}
 
 # Handlers
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Welcome to Anonymous Chat Bot!\nType /chat to find a partner.")
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Available commands:\n/start\n/help\n/chat\n/leave")
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Commands:\n/start - Start bot\n/chat - Find a partner\n/leave - Leave chat\n/help - Show help")
 
-async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Looking for a chat partner... (This is just a placeholder.)")
+async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    message = update.message.text if update.message else None
-    if message:
-        await update.message.reply_text(message)
+    if user_id in active_chats:
+        await update.message.reply_text("❗ You are already in a chat. Type /leave to end it.")
+        return
 
-# Main logic
-async def main() -> None:
-    application = Application.builder().token(TOKEN).updater(None).build()
+    if user_id in waiting_users:
+        await update.message.reply_text("⏳ You are already in the queue. Please wait...")
+        return
 
-    # Add handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("chat", chat))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+    if waiting_users:
+        partner_id = waiting_users.pop(0)
+        active_chats[user_id] = partner_id
+        active_chats[partner_id] = user_id
+
+        await context.bot.send_message(partner_id, "✅ You are now connected! Say hi 👋")
+        await update.message.reply_text("✅ You are now connected! Say hi 👋")
+    else:
+        waiting_users.append(user_id)
+        await update.message.reply_text("⏳ Waiting for a partner to connect...")
+
+async def leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    if user_id in active_chats:
+        partner_id = active_chats.pop(user_id)
+        active_chats.pop(partner_id, None)
+
+        await context.bot.send_message(partner_id, "❌ Your partner left the chat.")
+        await update.message.reply_text("❌ You left the chat.")
+    elif user_id in waiting_users:
+        waiting_users.remove(user_id)
+        await update.message.reply_text("❌ You left the waiting queue.")
+    else:
+        await update.message.reply_text("❗ You are not in a chat or queue.")
+
+async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id in active_chats:
+        partner_id = active_chats[user_id]
+        if update.message.text:
+            await context.bot.send_message(partner_id, update.message.text)
+        elif update.message.sticker:
+            await context.bot.send_sticker(partner_id, update.message.sticker.file_id)
+        elif update.message.photo:
+            await context.bot.send_photo(partner_id, update.message.photo[-1].file_id)
+        elif update.message.document:
+            await context.bot.send_document(partner_id, update.message.document.file_id)
+    else:
+        await update.message.reply_text("❗ You are not in a chat. Type /chat to find a partner.")
+
+# Main bot runner
+async def main():
+    app = Application.builder().token(TOKEN).updater(None).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("chat", chat))
+    app.add_handler(CommandHandler("leave", leave))
+    app.add_handler(MessageHandler(filters.TEXT | filters.Sticker | filters.PHOTO | filters.Document, forward_message))
 
     if USE_WEBHOOK:
-        await application.bot.set_webhook(url=f"{URL}/telegram")
+        await app.bot.set_webhook(url=f"{URL}/telegram")
 
         async def telegram(request: Request) -> Response:
             data = await request.json()
-            await application.update_queue.put(Update.de_json(data, application.bot))
+            await app.update_queue.put(Update.de_json(data, app.bot))
             return Response()
 
         async def health(_: Request) -> PlainTextResponse:
             return PlainTextResponse("Bot is running!")
 
-        app = Starlette(routes=[
+        star_app = Starlette(routes=[
             Route("/telegram", telegram, methods=["POST"]),
             Route("/healthcheck", health, methods=["GET"]),
         ])
 
-        config = uvicorn.Config(app=app, port=PORT, host="0.0.0.0")
+        config = uvicorn.Config(app=star_app, port=PORT, host="0.0.0.0")
         server = uvicorn.Server(config)
 
-        async with application:
-            await application.start()
+        async with app:
+            await app.start()
             await server.serve()
-            await application.stop()
+            await app.stop()
     else:
-        async with application:
-            await application.start()
-            await application.updater.start_polling()
-            logger.info("Bot started! Send a message to test it.")
-
-            try:
-                await asyncio.Event().wait()
-            except asyncio.CancelledError:
-                pass
-            finally:
-                await application.updater.stop()
-                await application.stop()
+        async with app:
+            await app.start()
+            await app.updater.start_polling()
+            await asyncio.Event().wait()
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
+        logger.info("Bot stopped")
     except Exception as e:
-        logger.error("Bot failed to start: %s", e)
+        logger.error("Error: %s", e)
         raise
         
