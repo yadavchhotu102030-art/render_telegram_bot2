@@ -42,13 +42,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Welcome to Anonymous Chat Bot!\nType /chat to find a partner.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Commands:\n"
-        "/start - Start bot\n"
-        "/chat - Find a partner\n"
-        "/leave - Leave chat\n"
-        "/help - Show help"
-    )
+    await update.message.reply_text("Commands:\n/start - Start bot\n/chat - Find a partner\n/leave - Leave chat\n/help - Show help")
 
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -96,7 +90,6 @@ async def forward_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif update.message.sticker:
             await context.bot.send_sticker(partner_id, update.message.sticker.file_id)
         elif update.message.photo:
-            # Send the highest resolution photo
             await context.bot.send_photo(partner_id, update.message.photo[-1].file_id)
         elif update.message.document:
             await context.bot.send_document(partner_id, update.message.document.file_id)
@@ -111,10 +104,12 @@ async def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("chat", chat))
     app.add_handler(CommandHandler("leave", leave))
+
+    # ✅ THIS IS THE CORRECT FILTER COMBINATION for PTB v22+
     app.add_handler(
         MessageHandler(
-            filters.TEXT | filters.Sticker | filters.Photo | filters.Document,
-            forward_message,
+            filters.TEXT | filters.Sticker.ALL | filters.Photo.ALL | filters.Document.ALL,
+            forward_message
         )
     )
 
@@ -132,13 +127,11 @@ async def main():
         async def root(_: Request) -> PlainTextResponse:
             return PlainTextResponse("Anonymous Chat Bot is alive!")
 
-        star_app = Starlette(
-            routes=[
-                Route("/", root, methods=["GET"]),
-                Route("/telegram", telegram, methods=["POST"]),
-                Route("/healthcheck", health, methods=["GET"]),
-            ]
-        )
+        star_app = Starlette(routes=[
+            Route("/", root, methods=["GET"]),
+            Route("/telegram", telegram, methods=["POST"]),
+            Route("/healthcheck", health, methods=["GET"]),
+        ])
 
         config = uvicorn.Config(app=star_app, port=PORT, host="0.0.0.0")
         server = uvicorn.Server(config)
@@ -161,4 +154,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error("Error: %s", e)
         raise
-    
